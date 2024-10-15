@@ -1,33 +1,90 @@
-const express = require('express');
+// Boilderplate setup.
+const express = require("express");
 const app = express();
 const port = 3000;
 
-app.set('view engine', 'ejs');
-app.use(express.urlencoded({ extended: true })); // For parsing form data
-app.use(express.static('public')); // To serve static files (e.g., CSS)
+app.set("view engine", "ejs");
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static("public"));
+
+// importing handlers from public folder.
+const {
+  generateQuestionHandler,
+} = require("./public/handlers/generateQuestionHandler");
+
+// Global variables to store the current question and the current streak
+let currentQuestion = null;
+let currentStreak = 0;
+
+// Instantiating an array to store leaderboard entries
+let leaderboard = [];
 
 
-//Some routes required for full functionality are missing here. Only get routes should be required
-app.get('/', (req, res) => {
-    res.render('index');
+// Home route
+app.get("/", (request, response) => {
+  response.render("index", { streak: currentStreak });
 });
 
-app.get('/quiz', (req, res) => {
-    res.render('quiz');
+// Quiz route
+app.get("/quiz", (request, response) => {
+  try {
+    currentQuestion = generateQuestionHandler();
+    response.render("quiz", {
+      question: currentQuestion.question,
+      streak: currentStreak,
+    });
+  } catch (error) {
+    console.error("Error: ", error);
+  }
 });
 
-//Handles quiz submissions.
-app.post('/quiz', (req, res) => {
-    const { answer } = req.body;
-    console.log(`Answer: ${answer}`);
-
-    //answer will contain the value the user entered on the quiz page
-    //Logic must be added here to check if the answer is correct, then track the streak and redirect properly
-    //By default we'll just redirect to the homepage again.
-    res.redirect('/');
+// Leaderboards route
+app.get("/leaderboards", (request, response) => {
+  response.render("leaderboards", { leaderboard: leaderboard });
 });
 
-// Start the server
+// Quiz complete route
+app.get("/quiz-complete", (req, res) => {
+  const finalStreak = req.query.streak || 0;
+  res.render("quiz-complete", { streak: finalStreak });
+});
+
+
+// Quiz route, handles the quiz form submission
+app.post("/quiz", (request, response) => {
+  const { answer } = request.body;
+
+  try {
+    if (answer === currentQuestion.answer) {
+      // If the answer is correct, increment the current streak
+      currentStreak++;
+      response.redirect("/quiz");
+    } else {
+      // Answer is incorrect, quiz is complete
+      const finalStreak = currentStreak;
+
+      // Add the ended streak to the leaderboard if it's greater than 0
+      if (finalStreak > 0) {
+        leaderboard.push({ streak: finalStreak, date: new Date() });
+        leaderboard.sort((a, b) => b.streak - a.streak);
+        leaderboard = leaderboard.slice(0, 10);
+      }
+
+      // Reset the current streak
+      currentStreak = 0;
+
+      // Redirect to the quiz-complete page with the final streak
+      response.redirect(`/quiz-complete?streak=${finalStreak}`);
+    }
+  } catch (error) {
+    console.error("Error processing answer: ", error);
+    response
+      .status(500)
+      .send("An error occurred while processing your answer.");
+  }
+});
+
+// Boilerplate code to start the server
 app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+  console.log(`Server running at http://localhost:${port}`);
 });
